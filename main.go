@@ -1,19 +1,29 @@
 package main
 
 import (
-	"net/http"
+	"auth/main/app"
+	"context"
+	"fmt"
+	"log"
+	"os"
+	"os/signal"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
+	"github.com/joho/godotenv"
 )
 
 func main() {
-	r := chi.NewRouter()
-	r.Use(middleware.Logger)
-	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("Hello World!"))
-	})
+	if err := godotenv.Load(); err != nil {
+		log.Println("ENV LOAD ERROR:", err)
+	}
 
-	port := ":8080"
-	http.ListenAndServe(port, r)
+	db := app.InitDb()
+	print(db)
+	app := app.New()
+
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer cancel()
+
+	if err := app.Start(ctx); err != nil {
+		fmt.Errorf("failed to start app: ", err)
+	}
 }
