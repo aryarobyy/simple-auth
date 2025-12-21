@@ -1,11 +1,12 @@
 package controller
 
 import (
+	"encoding/json"
+	"net/http"
+
 	"auth/internal/helper"
 	"auth/internal/model"
 	"auth/internal/service"
-	"encoding/json"
-	"net/http"
 )
 
 type AuthController struct {
@@ -39,7 +40,7 @@ func (h *AuthController) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, token, err := h.service.Login(r.Context(), user)
+	res, refreshToken, token, err := h.service.Login(r.Context(), user)
 	if err != nil {
 		helper.RespondError(w, http.StatusUnauthorized, err)
 		return
@@ -47,9 +48,9 @@ func (h *AuthController) Login(w http.ResponseWriter, r *http.Request) {
 
 	cookie := http.Cookie{
 		Name:     "token",
-		Value:    token,
+		Value:    refreshToken,
 		Path:     "/",
-		MaxAge:   3600,
+		MaxAge:   3600 * 24 * 7,
 		HttpOnly: true,
 		Secure:   true,
 		SameSite: http.SameSiteLaxMode,
@@ -57,5 +58,23 @@ func (h *AuthController) Login(w http.ResponseWriter, r *http.Request) {
 
 	http.SetCookie(w, &cookie)
 
-	helper.RespondSuccess(w, http.StatusAccepted, res)
+	helper.RespondSuccessWithToken(w, http.StatusAccepted, res, token)
+}
+
+func (h *AuthController) RefreshToken(w http.ResponseWriter, r *http.Request) {
+	cookie, err := r.Cookie("token")
+	if err != nil {
+		helper.RespondError(w, http.StatusUnauthorized, err)
+		return
+	}
+
+	refreshToken := cookie.Value
+
+	newToken, tokenErr := h.service.RefreshToken(r.Context(), refreshToken)
+	if tokenErr != nil {
+		helper.RespondError(w, http.StatusUnauthorized, err)
+		return
+	}
+
+	helper.RespondSuccessWithToken(w, http.StatusAccepted, nil, newToken)
 }

@@ -1,27 +1,39 @@
 package service
 
 import (
-	"auth/internal/helper"
-	"auth/internal/model"
-	"auth/internal/repository"
 	"context"
 	"fmt"
 
+	"auth/internal/helper"
+	"auth/internal/model"
+	"auth/internal/repository"
+
+	"github.com/redis/go-redis/v9"
 	"golang.org/x/crypto/bcrypt"
 )
 
 type AuthService interface {
 	Create(ctx context.Context, user model.User) (*model.User, error)
-	Login(ctx context.Context, user model.User) (*model.User, string, error)
+	Login(ctx context.Context, user model.User) (*model.User, string, string, error)
+	RefreshToken(ctx context.Context, refreshToken string) (string, error)
 }
 
 type authService struct {
-	repo     repository.AuthRepo
-	userRepo repository.UserRepo
+	repo        repository.AuthRepo
+	userRepo    repository.UserRepo
+	redisClient *redis.Client
 }
 
-func NewAuthService(repo repository.AuthRepo, userRepo repository.UserRepo) AuthService {
-	return &authService{repo: repo, userRepo: userRepo}
+func NewAuthService(
+	repo repository.AuthRepo,
+	userRepo repository.UserRepo,
+	redisClient *redis.Client,
+) AuthService {
+	return &authService{
+		repo:        repo,
+		userRepo:    userRepo,
+		redisClient: redisClient,
+	}
 }
 
 func (h *authService) Create(ctx context.Context, user model.User) (*model.User, error) {
@@ -52,20 +64,53 @@ func (h *authService) Create(ctx context.Context, user model.User) (*model.User,
 	return res, nil
 }
 
-func (h *authService) Login(ctx context.Context, user model.User) (*model.User, string, error) {
+func (h *authService) Login(ctx context.Context, user model.User) (*model.User, string, string, error) {
 	res, err := h.userRepo.GetByUsername(ctx, user.Username)
 	if err != nil {
-		return nil, "", fmt.Errorf("user not found", err)
+		return nil, "", "", fmt.Errorf("user not found", err)
 	}
 
 	passErr := bcrypt.CompareHashAndPassword([]byte(res.Password), []byte(user.Password))
 	if passErr != nil {
-		return nil, "", fmt.Errorf("wrong password")
+		return nil, "", "", fmt.Errorf("wrong password")
 	}
 
-	token, err := helper.CreateSessionToken(*res)
+	refreshToken, err := helper.CreateRefreshToken(ctx, user, h.redisClient)
 	if err != nil {
-		return nil, "", fmt.Errorf("user not found", err)
+		return nil, "", "", fmt.Errorf("user not found", err)
 	}
-	return res, token, nil
+
+	token, err := helper.CreateAccessToken(*res)
+	if err != nil {
+		return nil, "", "", fmt.Errorf("user not found", err)
+	}
+	return res, refreshToken, token, nil
+}
+
+// generate new token here
+func (h *authService) RefreshToken(
+	ctx context.Context,
+	refreshToken string,
+) (string, error) {
+	refreshClaims, err := helper.ValidateRefreshToken(
+		ctx,
+		refreshToken,
+		h.redisClient,
+	)
+	if err != nil {
+		return "", err
+	}
+
+	user := model.User{
+		ID:       refreshClaims.UserId,
+		Username: refreshClaims.Username,
+		Role:     model.Role(refreshClaims.Role),
+	}
+
+	newAccessToken, err := helper.CreateAccessToken(user)
+	if err != nil {
+		return "", err
+	}
+
+	return newAccessToken, nil
 }

@@ -1,15 +1,16 @@
 package app
 
 import (
-	"auth/internal/controller"
-	"auth/internal/repository"
-	"auth/internal/router"
-	"auth/internal/service"
 	"context"
 	"fmt"
 	"net/http"
 	"os"
 	"time"
+
+	"auth/internal/controller"
+	"auth/internal/repository"
+	"auth/internal/router"
+	"auth/internal/service"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -44,7 +45,7 @@ func New() *App {
 	authRepo := repository.NewAuthRepo(db)
 
 	userService := service.NewUserService(userRepo)
-	authService := service.NewAuthService(authRepo, userRepo)
+	authService := service.NewAuthService(authRepo, userRepo, redisClient)
 
 	controllers := &Controllers{
 		User: controller.NewUserController(userService),
