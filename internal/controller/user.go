@@ -1,19 +1,20 @@
 package controller
 
 import (
-	"auth/internal/helper"
-	"auth/internal/service"
 	"net/http"
 	"strconv"
+
+	"auth/internal/helper"
+	"auth/internal/service"
 
 	"github.com/go-chi/chi/v5"
 )
 
 type UserController struct {
-	service service.UserService
+	service service.Service
 }
 
-func NewUserController(s service.UserService) *UserController {
+func NewUserController(s service.Service) *UserController {
 	return &UserController{service: s}
 }
 
@@ -25,7 +26,8 @@ func (h *UserController) GetById(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := h.service.GetById(r.Context(), id)
+	s := h.service.User()
+	res, err := s.GetById(r.Context(), id)
 	if err != nil {
 		helper.RespondError(w, http.StatusBadRequest, err)
 		return
@@ -37,9 +39,27 @@ func (h *UserController) GetById(w http.ResponseWriter, r *http.Request) {
 func (h *UserController) GetByUsername(w http.ResponseWriter, r *http.Request) {
 	username := chi.URLParam(r, "username")
 
-	res, err := h.service.GetByUsername(r.Context(), username)
+	s := h.service.User()
+	res, err := s.GetByUsername(r.Context(), username)
 	if err != nil {
 		helper.RespondError(w, http.StatusBadRequest, err)
+		return
+	}
+
+	helper.RespondSuccess(w, http.StatusAccepted, res)
+}
+
+func (h *UserController) GetMany(w http.ResponseWriter, r *http.Request) {
+	limit, offset, pagErr := helper.Pagination(r)
+	if pagErr != nil {
+		helper.RespondError(w, http.StatusBadRequest, pagErr)
+		return
+	}
+
+	s := h.service.User()
+	res, err := s.GetMany(r.Context(), limit, offset)
+	if err != nil {
+		helper.RespondError(w, http.StatusBadRequest, pagErr)
 		return
 	}
 

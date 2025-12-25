@@ -19,19 +19,16 @@ type AuthService interface {
 }
 
 type authService struct {
-	repo        repository.AuthRepo
-	userRepo    repository.UserRepo
+	repo        repository.Repository
 	redisClient *redis.Client
 }
 
 func NewAuthService(
-	repo repository.AuthRepo,
-	userRepo repository.UserRepo,
+	repo repository.Repository,
 	redisClient *redis.Client,
 ) AuthService {
 	return &authService{
 		repo:        repo,
-		userRepo:    userRepo,
 		redisClient: redisClient,
 	}
 }
@@ -57,7 +54,8 @@ func (h *authService) Create(ctx context.Context, user model.User) (*model.User,
 		Username: user.Username,
 	}
 
-	res, err := h.repo.Create(ctx, registerData)
+	r := h.repo.Auth()
+	res, err := r.Create(ctx, registerData)
 	if err != nil {
 		return nil, fmt.Errorf("failed create user: %w", err)
 	}
@@ -65,7 +63,8 @@ func (h *authService) Create(ctx context.Context, user model.User) (*model.User,
 }
 
 func (h *authService) Login(ctx context.Context, user model.User) (*model.User, string, string, error) {
-	res, err := h.userRepo.GetByUsername(ctx, user.Username)
+	rU := h.repo.User()
+	res, err := rU.GetByUsername(ctx, user.Username)
 	if err != nil {
 		return nil, "", "", fmt.Errorf("user not found", err)
 	}

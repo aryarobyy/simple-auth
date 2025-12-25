@@ -1,9 +1,10 @@
 package repository
 
 import (
-	"auth/internal/model"
 	"context"
 	"database/sql"
+
+	"auth/internal/model"
 
 	"github.com/jmoiron/sqlx"
 )
@@ -11,6 +12,7 @@ import (
 type UserRepo interface {
 	GetById(ctx context.Context, id int) (*model.User, error)
 	GetByUsername(ctx context.Context, username string) (*model.User, error)
+	GetMany(ctx context.Context, limit int, offset int) ([]model.User, error)
 }
 
 type userRepo struct {
@@ -54,4 +56,23 @@ func (s *userRepo) GetByUsername(ctx context.Context, username string) (*model.U
 		return nil, err
 	}
 	return &user, nil
+}
+
+func (s *userRepo) GetMany(ctx context.Context, limit int, offset int) ([]model.User, error) {
+	user := []model.User{}
+
+	if err := s.db.GetContext(
+		ctx,
+		&user,
+		`SELECT * FROM users LIMIT $1 OFFSET $2`,
+		limit,
+		offset,
+	); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, err
+		}
+
+		return nil, err
+	}
+	return user, nil
 }

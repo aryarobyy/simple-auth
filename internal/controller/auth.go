@@ -10,10 +10,10 @@ import (
 )
 
 type AuthController struct {
-	service service.AuthService
+	service service.Service
 }
 
-func NewAuthController(s service.AuthService) *AuthController {
+func NewAuthController(s service.Service) *AuthController {
 	return &AuthController{service: s}
 }
 
@@ -24,7 +24,8 @@ func (h *AuthController) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := h.service.Create(r.Context(), user)
+	s := h.service.Auth()
+	res, err := s.Create(r.Context(), user)
 	if err != nil {
 		helper.RespondError(w, http.StatusBadRequest, err)
 		return
@@ -40,7 +41,8 @@ func (h *AuthController) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, refreshToken, token, err := h.service.Login(r.Context(), user)
+	s := h.service.Auth()
+	res, refreshToken, token, err := s.Login(r.Context(), user)
 	if err != nil {
 		helper.RespondError(w, http.StatusUnauthorized, err)
 		return
@@ -70,7 +72,8 @@ func (h *AuthController) RefreshToken(w http.ResponseWriter, r *http.Request) {
 
 	refreshToken := cookie.Value
 
-	newToken, tokenErr := h.service.RefreshToken(r.Context(), refreshToken)
+	s := h.service.Auth()
+	newToken, tokenErr := s.RefreshToken(r.Context(), refreshToken)
 	if tokenErr != nil {
 		helper.RespondError(w, http.StatusUnauthorized, err)
 		return

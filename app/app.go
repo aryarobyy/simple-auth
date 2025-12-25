@@ -24,11 +24,6 @@ type App struct {
 	rdb    *redis.Client
 }
 
-type Controllers struct {
-	User *controller.UserController
-	Auth *controller.AuthController
-}
-
 func New() *App {
 	db := InitDb()
 
@@ -41,18 +36,13 @@ func New() *App {
 		Addr: redisAddr,
 	})
 
-	userRepo := repository.NewUserRepo(db)
-	authRepo := repository.NewAuthRepo(db)
+	repo := repository.NewRepository(db)
 
-	userService := service.NewUserService(userRepo)
-	authService := service.NewAuthService(authRepo, userRepo, redisClient)
+	service := service.NewService(repo, redisClient)
 
-	controllers := &Controllers{
-		User: controller.NewUserController(userService),
-		Auth: controller.NewAuthController(authService),
-	}
+	controller := controller.NewController(service)
 
-	router := initRoutes(controllers)
+	router := initRoutes(controller)
 
 	return &App{
 		router: router,
@@ -61,7 +51,7 @@ func New() *App {
 	}
 }
 
-func initRoutes(ctrl *Controllers) *chi.Mux {
+func initRoutes(ctrl controller.Controller) *chi.Mux {
 	r := chi.NewRouter()
 
 	r.Use(middleware.Logger)
@@ -73,10 +63,10 @@ func initRoutes(ctrl *Controllers) *chi.Mux {
 	})
 
 	r.Route("/user", func(r chi.Router) {
-		router.UserRoutes(r, *ctrl.User)
+		router.UserRoutes(r, ctrl.User())
 	})
 	r.Route("/auth", func(r chi.Router) {
-		router.AuthRoutes(r, *ctrl.Auth)
+		router.AuthRoutes(r, ctrl.Auth())
 	})
 
 	return r
