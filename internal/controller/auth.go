@@ -31,7 +31,7 @@ func (h *AuthController) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	helper.RespondSuccess(w, http.StatusCreated, res)
+	helper.RespondSuccess(w, http.StatusCreated, res, nil, nil)
 }
 
 func (h *AuthController) Login(w http.ResponseWriter, r *http.Request) {
@@ -42,30 +42,29 @@ func (h *AuthController) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s := h.service.Auth()
-	res,token, err := s.Login(r.Context(), user)
+	res, refreshToken, token, err := s.Login(r.Context(), user)
 	if err != nil {
 		helper.RespondError(w, http.StatusUnauthorized, err)
 		return
 	}
 
-	helper.RespondSuccessWithToken(w, http.StatusAccepted, res, token)
+	helper.RespondSuccess(w, http.StatusAccepted, res, &token, &refreshToken)
 }
 
 func (h *AuthController) RefreshToken(w http.ResponseWriter, r *http.Request) {
-	cookie, err := r.Cookie("token")
-	if err != nil {
-		helper.RespondError(w, http.StatusUnauthorized, err)
+	var refreshToken string
+
+	if err := json.NewDecoder(r.Body).Decode(refreshToken); err != nil {
+		helper.RespondError(w, http.StatusBadRequest, err)
 		return
 	}
-
-	refreshToken := cookie.Value
 
 	s := h.service.Auth()
 	newToken, tokenErr := s.RefreshToken(r.Context(), refreshToken)
 	if tokenErr != nil {
-		helper.RespondError(w, http.StatusUnauthorized, err)
+		helper.RespondError(w, http.StatusUnauthorized, tokenErr)
 		return
 	}
 
-	helper.RespondSuccessWithToken(w, http.StatusAccepted, nil, newToken)
+	helper.RespondSuccess(w, http.StatusAccepted, nil, &newToken, nil)
 }

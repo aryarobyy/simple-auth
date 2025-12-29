@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"auth/internal/helper"
 	"auth/internal/model"
@@ -14,7 +15,7 @@ import (
 
 type AuthService interface {
 	Create(ctx context.Context, user model.User) (*model.User, error)
-	Login(ctx context.Context, user model.User) (*model.User, string, error)
+	Login(ctx context.Context, user model.User) (*model.User, string, string, error)
 	RefreshToken(ctx context.Context, refreshToken string) (string, error)
 }
 
@@ -65,42 +66,43 @@ func (h *authService) Create(ctx context.Context, user model.User) (*model.User,
 	return res, nil
 }
 
-func (h *authService) Login(ctx context.Context, user model.User) (*model.User, string, error) {
+func (h *authService) Login(ctx context.Context, user model.User) (*model.User, string, string, error) {
 	rU := h.repo.User()
 	res, err := rU.GetByUsername(ctx, user.Username)
 	if err != nil {
-		return nil, "", fmt.Errorf("user not found: %w", err)
+		return nil, "", "", fmt.Errorf("user not found: %w", err)
 	}
 
 	passErr := bcrypt.CompareHashAndPassword([]byte(res.Password), []byte(user.Password))
 	if passErr != nil {
-		return nil, "", fmt.Errorf("wrong password")
+		return nil, "", "", fmt.Errorf("wrong password")
 	}
 
-	if err := helper.CreateRefreshToken(ctx, user, h.redisClient); err != nil {
-		return nil, "", fmt.Errorf("user not found: %w", err)
+	refreshToken, err := helper.CreateRefreshToken(ctx, user, h.redisClient, &time.Time{})
+	if err != nil {
+		return nil, "", "", fmt.Errorf("user not found: %w", err)
 	}
 
 	token, err := helper.CreateAccessToken(*res)
 	if err != nil {
-		return nil, "", fmt.Errorf("user not found: %w", err)
+		return nil, "", "", fmt.Errorf("user not found: %w", err)
 	}
 
-	return res, token, nil
+	return res, refreshToken, token, nil
 }
 
 // generate new token here
 func (h *authService) RefreshToken(
 	ctx context.Context,
 	refreshToken string,
-) (string, error) {
+) (string, string, error) {
 	refreshClaims, err := helper.ValidateRefreshToken(
 		ctx,
 		refreshToken,
 		h.redisClient,
 	)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
 	user := model.User{
@@ -111,8 +113,23 @@ func (h *authService) RefreshToken(
 
 	newAccessToken, err := helper.CreateAccessToken(user)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
-	return newAccessToken, nil
+	newRefreshToken, err := helper.RefreshRotation(ctx, refreshToken, user, h.redisClient)
+	if err != nil {
+		return "", "", err
+	}
+
+	return newAccessToken, newRefreshToken, nil
+}
+
+func (h *authService) Logout(
+	ctx context.Context,
+	refreshToken string,
+) error {
+	if err := helper.RevokeRefreshToken(ctx, refreshToken, h.redisClient); err != nil {
+		return err
+	}
+	return nil
 }
