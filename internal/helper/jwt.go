@@ -84,9 +84,6 @@ func CreateRefreshToken(
 	if rdb == nil {
 		return "", errors.New("redis client required for refresh token")
 	}
-	if issued_at == nil {
-		issued_at = &time.Time{}
-	}
 
 	secret := os.Getenv("JWT_REFRESH_SECRET")
 	if secret == "" {
@@ -105,6 +102,7 @@ func CreateRefreshToken(
 
 	jti := uuid.NewString()
 	expiresAt := time.Now().Add(duration)
+	issuedAt := expiresAt.Add(30 * 24 * time.Hour)
 
 	claims := model.ClaimsModel{
 		UserID:   user.ID,
@@ -114,7 +112,7 @@ func CreateRefreshToken(
 			Issuer:    "auth-service",
 			ID:        jti,
 			Subject:   strconv.Itoa(user.ID),
-			IssuedAt:  jwt.NewNumericDate(*issued_at),
+			IssuedAt:  jwt.NewNumericDate(issuedAt),
 			ExpiresAt: jwt.NewNumericDate(expiresAt),
 		},
 	}
@@ -124,6 +122,9 @@ func CreateRefreshToken(
 	if err != nil {
 		return "", err
 	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
 
 	key := refreshKey(jti)
 	if err := rdb.Set(ctx, key, hashToken(tokenString), duration).Err(); err != nil {
@@ -205,7 +206,7 @@ func ValidateRefreshToken(
 		usedKey := "refresh:used:" + jti
 		if _, err := rdb.Get(ctx, usedKey).Result(); err == nil {
 			// paksa logout
-			RevokeRefreshToken(ctx, refreshToken, rdb)
+			RevokeRefreshToken(refreshToken, rdb)
 			return nil, errors.New("refresh token reuse detected")
 		}
 		return nil, errors.New("refresh token expired or revoked")
@@ -214,17 +215,47 @@ func ValidateRefreshToken(
 	return nil, err
 }
 
-func RevokeRefreshToken(ctx context.Context, refreshToken string, rdb *redis.Client) error {
-	claims, err := ValidateRefreshToken(ctx, refreshToken, rdb)
-	if err != nil {
-		return errors.New("refresh token invalid")
-	}
-
+func RevokeRefreshToken(refreshToken string, rdb *redis.Client) error {
 	if rdb == nil {
 		return errors.New("redis client required")
 	}
+
+	secret := os.Getenv("JWT_REFRESH_SECRET")
+	if secret == "" {
+		return errors.New("JWT_REFRESH_SECRET missing")
+	}
+
+	token, err := jwt.ParseWithClaims(
+		refreshToken,
+		&model.ClaimsModel{},
+		func(token *jwt.Token) (interface{}, error) {
+			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+			}
+			return []byte(secret), nil
+		},
+	)
+	if err != nil {
+		return nil
+	}
+
+	claims, ok := token.Claims.(*model.ClaimsModel)
+	if !ok {
+		return nil
+	}
+
 	jti := claims.ID
-	return rdb.Del(ctx, refreshKey(jti)).Err()
+	if jti == "" {
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	_ = rdb.Del(ctx, refreshKey(jti)).Err()
+	_ = rdb.Set(ctx, "refresh:used:"+jti, "1", 2*time.Minute).Err() // 2 mnt
+
+	return nil
 }
 
 func RefreshRotation(
@@ -244,7 +275,7 @@ func RefreshRotation(
 	}
 
 	issuedAt := claims.IssuedAt.Time
-	if time.Now().After(issuedAt.Add(30 * 24 * time.Hour)) {
+	if time.Now().After(issuedAt) {
 		_ = rdb.Del(ctx, refreshKey(oldJTI)).Err()
 		return "", errors.New("session expired, please login again")
 	}

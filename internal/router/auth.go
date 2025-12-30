@@ -10,4 +10,5 @@ func AuthRoutes(r chi.Router, auth controller.AuthController) {
 	r.Post("/", auth.Register)
 	r.Post("/login", auth.Login)
 	r.Post("/refresh", auth.RefreshToken)
+	r.Post("/logout", auth.Logout)
 }

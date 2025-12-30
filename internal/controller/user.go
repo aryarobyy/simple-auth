@@ -33,7 +33,7 @@ func (h *UserController) GetById(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	helper.RespondSuccess(w, http.StatusCreated, res, nil, nil)
+	helper.RespondSuccess(w, http.StatusOK, res, nil)
 }
 
 func (h *UserController) GetByUsername(w http.ResponseWriter, r *http.Request) {
@@ -46,7 +46,7 @@ func (h *UserController) GetByUsername(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	helper.RespondSuccess(w, http.StatusAccepted, res, nil, nil)
+	helper.RespondSuccess(w, http.StatusOK, res, nil)
 }
 
 func (h *UserController) GetMany(w http.ResponseWriter, r *http.Request) {
@@ -63,5 +63,5 @@ func (h *UserController) GetMany(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	helper.RespondSuccess(w, http.StatusAccepted, res, nil, nil)
+	helper.RespondSuccess(w, http.StatusOK, res, nil)
 }

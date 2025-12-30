@@ -7,16 +7,17 @@ import (
 )
 
 type SuccessResponse struct {
-	Data         any     `json:"data"`
-	Status       int     `json:"status"`
-	Token        *string `json:"token,omitempty"`
-	RefreshToken *string `json:"refresh_token,omitempty"`
+	Data    any     `json:"data"`
+	Status  int     `json:"status"`
+	Token   *string `json:"token,omitempty"`
+	Message string  `json:"message"`
 }
 
 type ErrorResponse struct {
-	Error  string `json:"error"`
-	Code   string `json:"code,omitempty"`
-	Status int    `json:"status"`
+	Error   string `json:"error"`
+	Code    string `json:"code,omitempty"`
+	Status  int    `json:"status"`
+	Message string `json:"message"`
 }
 
 type AppError struct {
@@ -30,16 +31,15 @@ func RespondSuccess(
 	status int,
 	data any,
 	token *string,
-	refreshToken *string,
 ) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 
 	_ = json.NewEncoder(w).Encode(SuccessResponse{
-		Status:       status,
-		Data:         data,
-		Token:        token,
-		RefreshToken: refreshToken,
+		Status:  status,
+		Message: "success",
+		Data:    data,
+		Token:   token,
 	})
 }
 
@@ -54,15 +54,17 @@ func RespondError(w http.ResponseWriter, status int, err error) {
 	if errors.As(err, &appErr) {
 		w.WriteHeader(appErr.Status)
 		_ = json.NewEncoder(w).Encode(ErrorResponse{
-			Error: appErr.Message,
-			Code:  appErr.Code,
+			Error:   appErr.Message,
+			Message: "error",
+			Code:    appErr.Code,
 		})
 		return
 	}
 
 	w.WriteHeader(http.StatusInternalServerError)
 	_ = json.NewEncoder(w).Encode(ErrorResponse{
-		Status: status,
-		Error:  err.Error(),
+		Status:  status,
+		Message: "error",
+		Error:   err.Error(),
 	})
 }

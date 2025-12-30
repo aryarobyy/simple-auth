@@ -121,14 +121,14 @@ func (h *authService) RefreshToken(
 		return "", "", err
 	}
 
-	return newAccessToken, newRefreshToken, nil
+	return newRefreshToken, newAccessToken, nil
 }
 
 func (h *authService) Logout(
 	ctx context.Context,
 	refreshToken string,
 ) error {
-	if err := helper.RevokeRefreshToken(ctx, refreshToken, h.redisClient); err != nil {
+	if err := helper.RevokeRefreshToken(refreshToken, h.redisClient); err != nil {
 		return err
 	}
 	return nil
